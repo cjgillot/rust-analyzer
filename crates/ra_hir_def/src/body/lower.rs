@@ -91,6 +91,7 @@ where
         (body, source_map)
     }
 
+    /// Allocate a new ExprId.
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
         let ptr = Either::A(ptr);
         let src = self.expander.to_source(ptr);
@@ -98,16 +99,23 @@ where
         self.body.map_expr(src, expr);
         expr
     }
+
+    /// Allocate an ExprId for a node created by desugaring.
+    /// It is not registered in the AST->HIR mapping.
     fn alloc_expr_desugared(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
         let ptr = Either::A(ptr);
         let src = self.expander.to_source(ptr);
         self.body.alloc_expr(expr, src)
     }
+
+    /// Allocate ExprId for RecordField.
     fn alloc_expr_field_shorthand(&mut self, expr: Expr, ptr: AstPtr<ast::RecordField>) -> ExprId {
         let ptr = Either::B(ptr);
         let src = self.expander.to_source(ptr);
         self.body.alloc_expr(expr, src)
     }
+
+    /// Allocate PatId.
     fn alloc_pat(&mut self, pat: Pat, ptr: PatPtr) -> PatId {
         let src = self.expander.to_source(ptr);
         let pat = self.body.alloc_pat(pat, src);
@@ -115,15 +123,18 @@ where
         pat
     }
 
+    /// Allocate an empty block.
     fn empty_block(&mut self, ptr: AstPtr<ast::Expr>) -> ExprId {
         let block = Expr::Block { statements: Vec::new(), tail: None };
         self.alloc_expr(block, ptr)
     }
 
+    /// Signal a missing expression.
     fn missing_expr(&mut self) -> ExprId {
         self.body.missing_expr()
     }
 
+    /// Signal a missing pattern.
     fn missing_pat(&mut self) -> PatId {
         self.body.missing_pat()
     }
