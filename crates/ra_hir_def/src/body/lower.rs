@@ -80,11 +80,7 @@ where
             }
         };
 
-        let body_expr = if let Some(expr) = body {
-            self.collect_expr(expr)
-        } else {
-            self.missing_expr()
-        };
+        let body_expr = self.collect_expr_opt(body);
 
         let (mut body, source_map) = self.body.split();
         body.body_expr = body_expr;
@@ -141,18 +137,9 @@ where
 
     fn collect_expr(&mut self, expr: ast::Expr) -> ExprId {
         let syntax_ptr = AstPtr::new(&expr);
-        macro_rules! collect_block { ($e:expr) => {
-            ($e).map(|e| self.collect_block(e)).unwrap_or_else(|| self.missing_expr())
-        }}
-        macro_rules! collect_expr { ($e:expr) => {
-            ($e).map(|e| self.collect_expr(e)).unwrap_or_else(|| self.missing_expr())
-        }}
-        macro_rules! collect_pat { ($e:expr) => {
-            ($e).map(|e| self.collect_pat(e)).unwrap_or_else(|| self.missing_pat())
-        }}
         match expr {
             ast::Expr::IfExpr(e) => {
-                let then_branch = collect_block!(e.then_branch());
+                let then_branch = self.collect_block_opt(e.then_branch());
 
                 let else_branch = e.else_branch().map(|b| match b {
                     ast::ElseBranch::Block(it) => self.collect_block(it),
@@ -165,11 +152,11 @@ where
                 let condition = match e.condition() {
                     None => self.missing_expr(),
                     Some(condition) => match condition.pat() {
-                        None => collect_expr!(condition.expr()),
+                        None => self.collect_expr_opt(condition.expr()),
                         // if let -- desugar to match
                         Some(pat) => {
                             let pat = self.collect_pat(pat);
-                            let match_expr = collect_expr!(condition.expr());
+                            let match_expr = self.collect_expr_opt(condition.expr());
                             let placeholder_pat = self.missing_pat();
                             let arms = vec![
                                 MatchArm { pats: vec![pat], expr: then_branch, guard: None },
@@ -188,26 +175,26 @@ where
                 self.alloc_expr(Expr::If { condition, then_branch, else_branch }, syntax_ptr)
             }
             ast::Expr::TryBlockExpr(e) => {
-                let body = collect_block!(e.body());
+                let body = self.collect_block_opt(e.body());
                 self.alloc_expr(Expr::TryBlock { body }, syntax_ptr)
             }
             ast::Expr::BlockExpr(e) => self.collect_block(e),
             ast::Expr::LoopExpr(e) => {
-                let body = collect_block!(e.loop_body());
+                let body = self.collect_block_opt(e.loop_body());
                 self.alloc_expr(Expr::Loop { body }, syntax_ptr)
             }
             ast::Expr::WhileExpr(e) => {
-                let body = collect_block!(e.loop_body());
+                let body = self.collect_block_opt(e.loop_body());
 
                 let condition = match e.condition() {
                     None => self.missing_expr(),
                     Some(condition) => match condition.pat() {
-                        None => collect_expr!(condition.expr()),
+                        None => self.collect_expr_opt(condition.expr()),
                         // if let -- desugar to match
                         Some(pat) => {
                             tested_by!(infer_resolve_while_let);
                             let pat = self.collect_pat(pat);
-                            let match_expr = collect_expr!(condition.expr());
+                            let match_expr = self.collect_expr_opt(condition.expr());
                             let placeholder_pat = self.missing_pat();
                             let break_ = self.alloc_expr_desugared(Expr::Break { expr: None }, syntax_ptr);
                             let arms = vec![
@@ -224,13 +211,13 @@ where
                 self.alloc_expr(Expr::While { condition, body }, syntax_ptr)
             }
             ast::Expr::ForExpr(e) => {
-                let iterable = collect_expr!(e.iterable());
-                let pat = collect_pat!(e.pat());
-                let body = collect_block!(e.loop_body());
+                let iterable = self.collect_expr_opt(e.iterable());
+                let pat = self.collect_pat_opt(e.pat());
+                let body = self.collect_block_opt(e.loop_body());
                 self.alloc_expr(Expr::For { iterable, pat, body }, syntax_ptr)
             }
             ast::Expr::CallExpr(e) => {
-                let callee = collect_expr!(e.expr());
+                let callee = self.collect_expr_opt(e.expr());
                 let args = if let Some(arg_list) = e.arg_list() {
                     arg_list.args().map(|e| self.collect_expr(e)).collect()
                 } else {
@@ -239,7 +226,7 @@ where
                 self.alloc_expr(Expr::Call { callee, args }, syntax_ptr)
             }
             ast::Expr::MethodCallExpr(e) => {
-                let receiver = collect_expr!(e.expr());
+                let receiver = self.collect_expr_opt(e.expr());
                 let args = if let Some(arg_list) = e.arg_list() {
                     arg_list.args().map(|e| self.collect_expr(e)).collect()
                 } else {
@@ -253,13 +240,13 @@ where
                 )
             }
             ast::Expr::MatchExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 let arms = if let Some(match_arm_list) = e.match_arm_list() {
                     match_arm_list
                         .arms()
                         .map(|arm| MatchArm {
                             pats: arm.pats().map(|p| self.collect_pat(p)).collect(),
-                            expr: collect_expr!(arm.expr()),
+                            expr: self.collect_expr_opt(arm.expr()),
                             guard: arm
                                 .guard()
                                 .and_then(|guard| guard.expr())
@@ -288,7 +275,7 @@ where
                 self.alloc_expr(Expr::Break { expr }, syntax_ptr)
             }
             ast::Expr::ParenExpr(e) => {
-                let inner = collect_expr!(e.expr());
+                let inner = self.collect_expr_opt(e.expr());
                 // make the paren expr point to the inner expression as well
                 let src = self.expander.to_source(Either::A(syntax_ptr));
                 self.body.map_expr(src, inner);
@@ -336,7 +323,7 @@ where
                 res
             }
             ast::Expr::FieldExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 let name = match e.field_access() {
                     Some(kind) => kind.as_name(),
                     _ => Name::missing(),
@@ -344,25 +331,25 @@ where
                 self.alloc_expr(Expr::Field { expr, name }, syntax_ptr)
             }
             ast::Expr::AwaitExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 self.alloc_expr(Expr::Await { expr }, syntax_ptr)
             }
             ast::Expr::TryExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 self.alloc_expr(Expr::Try { expr }, syntax_ptr)
             }
             ast::Expr::CastExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 let type_ref = TypeRef::from_ast_opt(e.type_ref());
                 self.alloc_expr(Expr::Cast { expr, type_ref }, syntax_ptr)
             }
             ast::Expr::RefExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 let mutability = Mutability::from_mutable(e.is_mut());
                 self.alloc_expr(Expr::Ref { expr, mutability }, syntax_ptr)
             }
             ast::Expr::PrefixExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 if let Some(op) = e.op_kind() {
                     self.alloc_expr(Expr::UnaryOp { expr, op }, syntax_ptr)
                 } else {
@@ -374,18 +361,18 @@ where
                 let mut arg_types = Vec::new();
                 if let Some(pl) = e.param_list() {
                     for param in pl.params() {
-                        let pat = collect_pat!(param.pat());
+                        let pat = self.collect_pat_opt(param.pat());
                         let type_ref = param.ascribed_type().map(TypeRef::from_ast);
                         args.push(pat);
                         arg_types.push(type_ref);
                     }
                 }
-                let body = collect_expr!(e.body());
+                let body = self.collect_expr_opt(e.body());
                 self.alloc_expr(Expr::Lambda { args, arg_types, body }, syntax_ptr)
             }
             ast::Expr::BinExpr(e) => {
-                let lhs = collect_expr!(e.lhs());
-                let rhs = collect_expr!(e.rhs());
+                let lhs = self.collect_expr_opt(e.lhs());
+                let rhs = self.collect_expr_opt(e.rhs());
                 let op = e.op_kind().map(BinaryOp::from);
                 self.alloc_expr(Expr::BinaryOp { lhs, rhs, op }, syntax_ptr)
             }
@@ -394,7 +381,7 @@ where
                 self.alloc_expr(Expr::Tuple { exprs }, syntax_ptr)
             }
             ast::Expr::BoxExpr(e) => {
-                let expr = collect_expr!(e.expr());
+                let expr = self.collect_expr_opt(e.expr());
                 self.alloc_expr(Expr::Box { expr }, syntax_ptr)
             }
 
@@ -407,8 +394,8 @@ where
                         self.alloc_expr(Expr::Array(Array::ElementList(exprs)), syntax_ptr)
                     }
                     ArrayExprKind::Repeat { initializer, repeat } => {
-                        let initializer = collect_expr!(initializer);
-                        let repeat = collect_expr!(repeat);
+                        let initializer = self.collect_expr_opt(initializer);
+                        let repeat = self.collect_expr_opt(repeat);
                         self.alloc_expr(
                             Expr::Array(Array::Repeat { initializer, repeat }),
                             syntax_ptr,
@@ -438,8 +425,8 @@ where
                 self.alloc_expr(Expr::Literal(lit), syntax_ptr)
             }
             ast::Expr::IndexExpr(e) => {
-                let base = collect_expr!(e.base());
-                let index = collect_expr!(e.index());
+                let base = self.collect_expr_opt(e.base());
+                let index = self.collect_expr_opt(e.index());
                 self.alloc_expr(Expr::Index { base, index }, syntax_ptr)
             }
 
@@ -457,14 +444,16 @@ where
         }
     }
 
+    fn collect_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
+        if let Some(expr) = expr {
+            self.collect_expr(expr)
+        } else {
+            self.missing_expr()
+        }
+    }
+
     fn collect_block(&mut self, expr: ast::BlockExpr) -> ExprId {
         let syntax_node_ptr = AstPtr::new(&expr.clone().into());
-        macro_rules! collect_expr { ($e:expr) => {
-            ($e).map(|e| self.collect_expr(e)).unwrap_or_else(|| self.missing_expr())
-        }}
-        macro_rules! collect_pat { ($e:expr) => {
-            ($e).map(|e| self.collect_pat(e)).unwrap_or_else(|| self.missing_pat())
-        }}
         let block = match expr.block() {
             Some(block) => block,
             None => return self.alloc_expr(Expr::Missing, syntax_node_ptr),
@@ -473,22 +462,27 @@ where
             .statements()
             .map(|s| match s {
                 ast::Stmt::LetStmt(stmt) => {
-                    let pat = collect_pat!(stmt.pat());
+                    let pat = self.collect_pat_opt(stmt.pat());
                     let type_ref = stmt.ascribed_type().map(TypeRef::from_ast);
                     let initializer = stmt.initializer().map(|e| self.collect_expr(e));
                     Statement::Let { pat, type_ref, initializer }
                 }
-                ast::Stmt::ExprStmt(stmt) => Statement::Expr(collect_expr!(stmt.expr())),
+                ast::Stmt::ExprStmt(stmt) => Statement::Expr(self.collect_expr_opt(stmt.expr())),
             })
             .collect();
         let tail = block.expr().map(|e| self.collect_expr(e));
         self.alloc_expr(Expr::Block { statements, tail }, syntax_node_ptr)
     }
 
+    fn collect_block_opt(&mut self, expr: Option<ast::BlockExpr>) -> ExprId {
+        if let Some(block) = expr {
+            self.collect_block(block)
+        } else {
+            self.missing_expr()
+        }
+    }
+
     fn collect_pat(&mut self, pat: ast::Pat) -> PatId {
-        macro_rules! collect_pat { ($e:expr) => {
-            ($e).map(|e| self.collect_pat(e)).unwrap_or_else(|| self.missing_pat())
-        }}
         let pattern = match &pat {
             ast::Pat::BindPat(bp) => {
                 let name = bp.name().map(|nr| nr.as_name()).unwrap_or_else(Name::missing);
@@ -502,7 +496,7 @@ where
                 Pat::TupleStruct { path, args }
             }
             ast::Pat::RefPat(p) => {
-                let pat = collect_pat!(p.pat());
+                let pat = self.collect_pat_opt(p.pat());
                 let mutability = Mutability::from_mutable(p.is_mut());
                 Pat::Ref { pat, mutability }
             }
@@ -548,6 +542,14 @@ where
         };
         let ptr = AstPtr::new(&pat);
         self.alloc_pat(pattern, Either::A(ptr))
+    }
+
+    fn collect_pat_opt(&mut self, pat: Option<ast::Pat>) -> PatId {
+        if let Some(pat) = pat {
+            self.collect_pat(pat)
+        } else {
+            self.missing_pat()
+        }
     }
 }
 
