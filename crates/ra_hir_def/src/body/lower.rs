@@ -137,29 +137,29 @@ where
 
     fn collect_expr(&mut self, expr: ast::Expr) -> ExprId {
         let syntax_ptr = AstPtr::new(&expr);
-        match expr {
+        let expr = match expr {
             ast::Expr::IfExpr(e) => {
                 let expr = self.collect_if(e, syntax_ptr);
-                self.alloc_expr(expr, syntax_ptr)
+                expr
             }
             ast::Expr::TryBlockExpr(e) => {
                 let body = self.collect_block_opt(e.body());
-                self.alloc_expr(Expr::TryBlock { body }, syntax_ptr)
+                Expr::TryBlock { body }
             }
-            ast::Expr::BlockExpr(e) => self.collect_block(e),
+            ast::Expr::BlockExpr(e) => return self.collect_block(e),
             ast::Expr::LoopExpr(e) => {
                 let body = self.collect_block_opt(e.loop_body());
-                self.alloc_expr(Expr::Loop { body }, syntax_ptr)
+                Expr::Loop { body }
             }
             ast::Expr::WhileExpr(e) => {
                 let expr = self.collect_while(e, syntax_ptr);
-                self.alloc_expr(expr, syntax_ptr)
+                expr
             }
             ast::Expr::ForExpr(e) => {
                 let iterable = self.collect_expr_opt(e.iterable());
                 let pat = self.collect_pat_opt(e.pat());
                 let body = self.collect_block_opt(e.loop_body());
-                self.alloc_expr(Expr::For { iterable, pat, body }, syntax_ptr)
+                Expr::For { iterable, pat, body }
             }
             ast::Expr::CallExpr(e) => {
                 let callee = self.collect_expr_opt(e.expr());
@@ -168,7 +168,7 @@ where
                 } else {
                     Vec::new()
                 };
-                self.alloc_expr(Expr::Call { callee, args }, syntax_ptr)
+                Expr::Call { callee, args }
             }
             ast::Expr::MethodCallExpr(e) => {
                 let receiver = self.collect_expr_opt(e.expr());
@@ -179,10 +179,7 @@ where
                 };
                 let method_name = e.name_ref().map(|nr| nr.as_name()).unwrap_or_else(Name::missing);
                 let generic_args = e.type_arg_list().and_then(GenericArgs::from_ast);
-                self.alloc_expr(
-                    Expr::MethodCall { receiver, method_name, args, generic_args },
-                    syntax_ptr,
-                )
+                Expr::MethodCall { receiver, method_name, args, generic_args }
             }
             ast::Expr::MatchExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
@@ -201,34 +198,32 @@ where
                 } else {
                     Vec::new()
                 };
-                self.alloc_expr(Expr::Match { expr, arms }, syntax_ptr)
+                Expr::Match { expr, arms }
             }
             ast::Expr::PathExpr(e) => {
-                let path = e
-                    .path()
+                e.path()
                     .and_then(|path| self.expander.parse_path(path))
                     .map(Expr::Path)
-                    .unwrap_or(Expr::Missing);
-                self.alloc_expr(path, syntax_ptr)
+                    .unwrap_or(Expr::Missing)
             }
             ast::Expr::ContinueExpr(_e) => {
                 // FIXME: labels
-                self.alloc_expr(Expr::Continue, syntax_ptr)
+                Expr::Continue
             }
             ast::Expr::BreakExpr(e) => {
                 let expr = e.expr().map(|e| self.collect_expr(e));
-                self.alloc_expr(Expr::Break { expr }, syntax_ptr)
+                Expr::Break { expr }
             }
             ast::Expr::ParenExpr(e) => {
                 let inner = self.collect_expr_opt(e.expr());
                 // make the paren expr point to the inner expression as well
                 let src = self.expander.to_source(Either::A(syntax_ptr));
                 self.body.map_expr(src, inner);
-                inner
+                return inner
             }
             ast::Expr::ReturnExpr(e) => {
                 let expr = e.expr().map(|e| self.collect_expr(e));
-                self.alloc_expr(Expr::Return { expr }, syntax_ptr)
+                Expr::Return { expr }
             }
             ast::Expr::RecordLit(e) => {
                 let path = e.path().and_then(|path| self.expander.parse_path(path));
@@ -265,7 +260,7 @@ where
                 for (i, ptr) in field_ptrs.into_iter().enumerate() {
                     self.body.map_field(i, ptr, res);
                 }
-                res
+                return res
             }
             ast::Expr::FieldExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
@@ -273,32 +268,32 @@ where
                     Some(kind) => kind.as_name(),
                     _ => Name::missing(),
                 };
-                self.alloc_expr(Expr::Field { expr, name }, syntax_ptr)
+                Expr::Field { expr, name }
             }
             ast::Expr::AwaitExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
-                self.alloc_expr(Expr::Await { expr }, syntax_ptr)
+                Expr::Await { expr }
             }
             ast::Expr::TryExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
-                self.alloc_expr(Expr::Try { expr }, syntax_ptr)
+                Expr::Try { expr }
             }
             ast::Expr::CastExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
                 let type_ref = TypeRef::from_ast_opt(e.type_ref());
-                self.alloc_expr(Expr::Cast { expr, type_ref }, syntax_ptr)
+                Expr::Cast { expr, type_ref }
             }
             ast::Expr::RefExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
                 let mutability = Mutability::from_mutable(e.is_mut());
-                self.alloc_expr(Expr::Ref { expr, mutability }, syntax_ptr)
+                Expr::Ref { expr, mutability }
             }
             ast::Expr::PrefixExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
                 if let Some(op) = e.op_kind() {
-                    self.alloc_expr(Expr::UnaryOp { expr, op }, syntax_ptr)
+                    Expr::UnaryOp { expr, op }
                 } else {
-                    self.alloc_expr(Expr::Missing, syntax_ptr)
+                    Expr::Missing
                 }
             }
             ast::Expr::LambdaExpr(e) => {
@@ -313,21 +308,21 @@ where
                     }
                 }
                 let body = self.collect_expr_opt(e.body());
-                self.alloc_expr(Expr::Lambda { args, arg_types, body }, syntax_ptr)
+                Expr::Lambda { args, arg_types, body }
             }
             ast::Expr::BinExpr(e) => {
                 let lhs = self.collect_expr_opt(e.lhs());
                 let rhs = self.collect_expr_opt(e.rhs());
                 let op = e.op_kind().map(BinaryOp::from);
-                self.alloc_expr(Expr::BinaryOp { lhs, rhs, op }, syntax_ptr)
+                Expr::BinaryOp { lhs, rhs, op }
             }
             ast::Expr::TupleExpr(e) => {
                 let exprs = e.exprs().map(|expr| self.collect_expr(expr)).collect();
-                self.alloc_expr(Expr::Tuple { exprs }, syntax_ptr)
+                Expr::Tuple { exprs }
             }
             ast::Expr::BoxExpr(e) => {
                 let expr = self.collect_expr_opt(e.expr());
-                self.alloc_expr(Expr::Box { expr }, syntax_ptr)
+                Expr::Box { expr }
             }
 
             ast::Expr::ArrayExpr(e) => {
@@ -336,15 +331,12 @@ where
                 match kind {
                     ArrayExprKind::ElementList(e) => {
                         let exprs = e.map(|expr| self.collect_expr(expr)).collect();
-                        self.alloc_expr(Expr::Array(Array::ElementList(exprs)), syntax_ptr)
+                        Expr::Array(Array::ElementList(exprs))
                     }
                     ArrayExprKind::Repeat { initializer, repeat } => {
                         let initializer = self.collect_expr_opt(initializer);
                         let repeat = self.collect_expr_opt(repeat);
-                        self.alloc_expr(
-                            Expr::Array(Array::Repeat { initializer, repeat }),
-                            syntax_ptr,
-                        )
+                        Expr::Array(Array::Repeat { initializer, repeat })
                     }
                 }
             }
@@ -367,26 +359,27 @@ where
                     LiteralKind::Bool => Literal::Bool(Default::default()),
                     LiteralKind::Char => Literal::Char(Default::default()),
                 };
-                self.alloc_expr(Expr::Literal(lit), syntax_ptr)
+                Expr::Literal(lit)
             }
             ast::Expr::IndexExpr(e) => {
                 let base = self.collect_expr_opt(e.base());
                 let index = self.collect_expr_opt(e.index());
-                self.alloc_expr(Expr::Index { base, index }, syntax_ptr)
+                Expr::Index { base, index }
             }
 
             // FIXME implement HIR for these:
-            ast::Expr::Label(_e) => self.alloc_expr(Expr::Missing, syntax_ptr),
-            ast::Expr::RangeExpr(_e) => self.alloc_expr(Expr::Missing, syntax_ptr),
+            ast::Expr::Label(_e) => Expr::Missing,
+            ast::Expr::RangeExpr(_e) => Expr::Missing,
             ast::Expr::MacroCall(e) => match self.expander.enter_expand(self.db, e) {
                 Some((mark, expansion)) => {
                     let id = self.collect_expr(expansion);
                     self.expander.exit(self.db, mark);
-                    id
+                    return id
                 }
-                None => self.alloc_expr(Expr::Missing, syntax_ptr),
+                None => Expr::Missing,
             },
-        }
+        };
+        self.alloc_expr(expr, syntax_ptr)
     }
 
     fn collect_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
