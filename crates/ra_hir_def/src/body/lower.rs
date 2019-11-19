@@ -139,40 +139,8 @@ where
         let syntax_ptr = AstPtr::new(&expr);
         match expr {
             ast::Expr::IfExpr(e) => {
-                let then_branch = self.collect_block_opt(e.then_branch());
-
-                let else_branch = e.else_branch().map(|b| match b {
-                    ast::ElseBranch::Block(it) => self.collect_block(it),
-                    ast::ElseBranch::IfExpr(elif) => {
-                        let expr: ast::Expr = ast::Expr::cast(elif.syntax().clone()).unwrap();
-                        self.collect_expr(expr)
-                    }
-                });
-
-                let condition = match e.condition() {
-                    None => self.missing_expr(),
-                    Some(condition) => match condition.pat() {
-                        None => self.collect_expr_opt(condition.expr()),
-                        // if let -- desugar to match
-                        Some(pat) => {
-                            let pat = self.collect_pat(pat);
-                            let match_expr = self.collect_expr_opt(condition.expr());
-                            let placeholder_pat = self.missing_pat();
-                            let arms = vec![
-                                MatchArm { pats: vec![pat], expr: then_branch, guard: None },
-                                MatchArm {
-                                    pats: vec![placeholder_pat],
-                                    expr: else_branch.unwrap_or_else(|| self.empty_block(syntax_ptr)),
-                                    guard: None,
-                                },
-                            ];
-                            return self
-                                .alloc_expr(Expr::Match { expr: match_expr, arms }, syntax_ptr);
-                        }
-                    },
-                };
-
-                self.alloc_expr(Expr::If { condition, then_branch, else_branch }, syntax_ptr)
+                let expr = self.collect_if(e, syntax_ptr);
+                self.alloc_expr(expr, syntax_ptr)
             }
             ast::Expr::TryBlockExpr(e) => {
                 let body = self.collect_block_opt(e.body());
@@ -184,31 +152,8 @@ where
                 self.alloc_expr(Expr::Loop { body }, syntax_ptr)
             }
             ast::Expr::WhileExpr(e) => {
-                let body = self.collect_block_opt(e.loop_body());
-
-                let condition = match e.condition() {
-                    None => self.missing_expr(),
-                    Some(condition) => match condition.pat() {
-                        None => self.collect_expr_opt(condition.expr()),
-                        // if let -- desugar to match
-                        Some(pat) => {
-                            tested_by!(infer_resolve_while_let);
-                            let pat = self.collect_pat(pat);
-                            let match_expr = self.collect_expr_opt(condition.expr());
-                            let placeholder_pat = self.missing_pat();
-                            let break_ = self.alloc_expr_desugared(Expr::Break { expr: None }, syntax_ptr);
-                            let arms = vec![
-                                MatchArm { pats: vec![pat], expr: body, guard: None },
-                                MatchArm { pats: vec![placeholder_pat], expr: break_, guard: None },
-                            ];
-                            let match_expr =
-                                self.alloc_expr_desugared(Expr::Match { expr: match_expr, arms }, syntax_ptr);
-                            return self.alloc_expr(Expr::Loop { body: match_expr }, syntax_ptr);
-                        }
-                    },
-                };
-
-                self.alloc_expr(Expr::While { condition, body }, syntax_ptr)
+                let expr = self.collect_while(e, syntax_ptr);
+                self.alloc_expr(expr, syntax_ptr)
             }
             ast::Expr::ForExpr(e) => {
                 let iterable = self.collect_expr_opt(e.iterable());
@@ -450,6 +395,70 @@ where
         } else {
             self.missing_expr()
         }
+    }
+
+    fn collect_if(&mut self, expr: ast::IfExpr, syntax_ptr: AstPtr<ast::Expr>) -> Expr {
+        let then_branch = self.collect_block_opt(expr.then_branch());
+
+        let else_branch = expr.else_branch().map(|b| match b {
+            ast::ElseBranch::Block(it) => self.collect_block(it),
+            ast::ElseBranch::IfExpr(elif) => {
+                let expr: ast::Expr = ast::Expr::cast(elif.syntax().clone()).unwrap();
+                self.collect_expr(expr)
+            }
+        });
+
+        let condition = match expr.condition() {
+            None => self.missing_expr(),
+            Some(condition) => match condition.pat() {
+                None => self.collect_expr_opt(condition.expr()),
+                // if let -- desugar to match
+                Some(pat) => {
+                    let pat = self.collect_pat(pat);
+                    let match_expr = self.collect_expr_opt(condition.expr());
+                    let placeholder_pat = self.missing_pat();
+                    let arms = vec![
+                        MatchArm { pats: vec![pat], expr: then_branch, guard: None },
+                        MatchArm {
+                            pats: vec![placeholder_pat],
+                            expr: else_branch.unwrap_or_else(|| self.empty_block(syntax_ptr)),
+                            guard: None,
+                        },
+                    ];
+                    return Expr::Match { expr: match_expr, arms };
+                }
+            },
+        };
+
+        Expr::If { condition, then_branch, else_branch }
+    }
+
+    fn collect_while(&mut self, expr: ast::WhileExpr, syntax_ptr: AstPtr<ast::Expr>) -> Expr {
+        let body = self.collect_block_opt(expr.loop_body());
+
+        let condition = match expr.condition() {
+            None => self.missing_expr(),
+            Some(condition) => match condition.pat() {
+                None => self.collect_expr_opt(condition.expr()),
+                // if let -- desugar to match
+                Some(pat) => {
+                    tested_by!(infer_resolve_while_let);
+                    let pat = self.collect_pat(pat);
+                    let match_expr = self.collect_expr_opt(condition.expr());
+                    let placeholder_pat = self.missing_pat();
+                    let break_ = self.alloc_expr_desugared(Expr::Break { expr: None }, syntax_ptr);
+                    let arms = vec![
+                        MatchArm { pats: vec![pat], expr: body, guard: None },
+                        MatchArm { pats: vec![placeholder_pat], expr: break_, guard: None },
+                    ];
+                    let match_expr =
+                        self.alloc_expr_desugared(Expr::Match { expr: match_expr, arms }, syntax_ptr);
+                    return Expr::Loop { body: match_expr };
+                }
+            },
+        };
+
+        Expr::While { condition, body }
     }
 
     fn collect_block(&mut self, expr: ast::BlockExpr) -> ExprId {
