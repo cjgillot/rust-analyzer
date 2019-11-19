@@ -4,7 +4,6 @@ use hir_expand::{
     either::Either,
     name::{self, AsName, Name},
 };
-use ra_arena::Arena;
 use ra_syntax::{
     ast::{
         self, ArgListOwner, ArrayExprKind, LiteralKind, LoopBodyOwner, NameOwner,
@@ -15,7 +14,7 @@ use ra_syntax::{
 use test_utils::tested_by;
 
 use crate::{
-    body::{Body, BodySourceMap, Expander, PatPtr, ExprSource, PatSource},
+    body::{Body, BodySourceMap, BodyWithSourceMap, Expander, PatPtr},
     builtin_type::{BuiltinFloat, BuiltinInt},
     db::DefDatabase,
     expr::{
@@ -26,68 +25,6 @@ use crate::{
     path::Path,
     type_ref::{Mutability, TypeRef},
 };
-
-struct BodyWithSourceMap {
-    body: Body,
-    source_map: BodySourceMap,
-}
-
-impl BodyWithSourceMap {
-    fn new() -> BodyWithSourceMap {
-        BodyWithSourceMap {
-            body: Body {
-                exprs: Arena::default(),
-                pats: Arena::default(),
-                params: Vec::new(),
-                body_expr: ExprId::dummy(),
-            },
-            source_map: BodySourceMap::default(),
-        }
-    }
-
-    fn split(self) -> (Body, BodySourceMap) {
-        (self.body, self.source_map)
-    }
-
-    fn push_param(&mut self, pat: PatId) {
-        self.body.params.push(pat)
-    }
-
-    fn map_expr(&mut self, src: ExprSource, to: ExprId) {
-        self.source_map.expr_map.insert(src, to);
-    }
-
-    fn map_field(&mut self, i: usize, src: AstPtr<ast::RecordField>, res: ExprId) {
-        self.source_map.field_map.insert((res, i), src);
-    }
-
-    fn alloc_expr(&mut self, expr: Expr, src: ExprSource) -> ExprId {
-        let id = self.body.exprs.alloc(expr);
-        self.source_map.expr_map.insert(src, id);
-        self.source_map.expr_map_back.insert(id, src);
-        id
-    }
-
-    fn alloc_expr_desugared(&mut self, expr: Expr) -> ExprId {
-        let id = self.body.exprs.alloc(expr);
-        id
-    }
-
-    fn alloc_pat(&mut self, pat: Pat, src: PatSource) -> PatId {
-        let id = self.body.pats.alloc(pat);
-        self.source_map.pat_map.insert(src, id);
-        self.source_map.pat_map_back.insert(id, src);
-        id
-    }
-
-    fn missing_expr(&mut self) -> ExprId {
-        self.body.exprs.alloc(Expr::Missing)
-    }
-
-    fn missing_pat(&mut self) -> PatId {
-        self.body.pats.alloc(Pat::Missing)
-    }
-}
 
 pub(super) fn lower(
     db: &impl DefDatabase,
