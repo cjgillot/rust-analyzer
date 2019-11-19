@@ -45,6 +45,22 @@ impl BodyWithSourceMap {
         }
     }
 
+    fn split(self) -> (Body, BodySourceMap) {
+        (self.body, self.source_map)
+    }
+
+    fn push_param(&mut self, pat: PatId) {
+        self.body.params.push(pat)
+    }
+
+    fn map_expr(&mut self, src: ExprSource, to: ExprId) {
+        self.source_map.expr_map.insert(src, to);
+    }
+
+    fn map_field(&mut self, i: usize, src: AstPtr<ast::RecordField>, res: ExprId) {
+        self.source_map.field_map.insert((res, i), src);
+    }
+
     fn alloc_expr(&mut self, expr: Expr, src: ExprSource) -> ExprId {
         let id = self.body.exprs.alloc(expr);
         self.source_map.expr_map.insert(src, id);
@@ -64,8 +80,12 @@ impl BodyWithSourceMap {
         id
     }
 
-    fn push_param(&mut self, pat: PatId) {
-        self.body.params.push(pat)
+    fn missing_expr(&mut self) -> ExprId {
+        self.body.exprs.alloc(Expr::Missing)
+    }
+
+    fn missing_pat(&mut self) -> PatId {
+        self.body.pats.alloc(Pat::Missing)
     }
 }
 
@@ -128,8 +148,10 @@ where
         } else {
             self.missing_expr()
         };
-        self.body.body.body_expr = body_expr;
-        (self.body.body, self.body.source_map)
+
+        let (mut body, source_map) = self.body.split();
+        body.body_expr = body_expr;
+        (body, source_map)
     }
 
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
@@ -156,11 +178,11 @@ where
     }
 
     fn missing_expr(&mut self) -> ExprId {
-        self.body.body.exprs.alloc(Expr::Missing)
+        self.body.missing_expr()
     }
 
     fn missing_pat(&mut self) -> PatId {
-        self.body.body.pats.alloc(Pat::Missing)
+        self.body.missing_pat()
     }
 
     fn collect_expr(&mut self, expr: ast::Expr) -> ExprId {
@@ -315,7 +337,7 @@ where
                 let inner = collect_expr!(e.expr());
                 // make the paren expr point to the inner expression as well
                 let src = self.expander.to_source(Either::A(syntax_ptr));
-                self.body.source_map.expr_map.insert(src, inner);
+                self.body.map_expr(src, inner);
                 inner
             }
             ast::Expr::ReturnExpr(e) => {
@@ -355,7 +377,7 @@ where
 
                 let res = self.alloc_expr(record_lit, syntax_ptr);
                 for (i, ptr) in field_ptrs.into_iter().enumerate() {
-                    self.body.source_map.field_map.insert((res, i), ptr);
+                    self.body.map_field(i, ptr, res);
                 }
                 res
             }
