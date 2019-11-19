@@ -94,10 +94,14 @@ where
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
         let ptr = Either::A(ptr);
         let src = self.expander.to_source(ptr);
-        self.body.alloc_expr(expr, src)
+        let expr = self.body.alloc_expr(expr, src);
+        self.body.map_expr(src, expr);
+        expr
     }
-    fn alloc_expr_desugared(&mut self, expr: Expr) -> ExprId {
-        self.body.alloc_expr_desugared(expr)
+    fn alloc_expr_desugared(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
+        let ptr = Either::A(ptr);
+        let src = self.expander.to_source(ptr);
+        self.body.alloc_expr(expr, src)
     }
     fn alloc_expr_field_shorthand(&mut self, expr: Expr, ptr: AstPtr<ast::RecordField>) -> ExprId {
         let ptr = Either::B(ptr);
@@ -106,7 +110,9 @@ where
     }
     fn alloc_pat(&mut self, pat: Pat, ptr: PatPtr) -> PatId {
         let src = self.expander.to_source(ptr);
-        self.body.alloc_pat(pat, src)
+        let pat = self.body.alloc_pat(pat, src);
+        self.body.map_pat(src, pat);
+        pat
     }
 
     fn empty_block(&mut self, ptr: AstPtr<ast::Expr>) -> ExprId {
@@ -192,13 +198,13 @@ where
                             let pat = self.collect_pat(pat);
                             let match_expr = collect_expr!(condition.expr());
                             let placeholder_pat = self.missing_pat();
-                            let break_ = self.alloc_expr_desugared(Expr::Break { expr: None });
+                            let break_ = self.alloc_expr_desugared(Expr::Break { expr: None }, syntax_ptr);
                             let arms = vec![
                                 MatchArm { pats: vec![pat], expr: body, guard: None },
                                 MatchArm { pats: vec![placeholder_pat], expr: break_, guard: None },
                             ];
                             let match_expr =
-                                self.alloc_expr_desugared(Expr::Match { expr: match_expr, arms });
+                                self.alloc_expr_desugared(Expr::Match { expr: match_expr, arms }, syntax_ptr);
                             return self.alloc_expr(Expr::Loop { body: match_expr }, syntax_ptr);
                         }
                     },

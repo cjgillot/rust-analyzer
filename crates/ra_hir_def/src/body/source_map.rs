@@ -99,32 +99,35 @@ impl BodyWithSourceMap {
         self.body.params.push(pat)
     }
 
+    // AST -> HIR mapping
+
     pub fn map_expr(&mut self, src: ExprSource, to: ExprId) {
         self.source_map.expr_map.insert(src, to);
+    }
+
+    pub fn map_pat(&mut self, src: PatSource, to: PatId) {
+        self.source_map.pat_map.insert(src, to);
     }
 
     pub fn map_field(&mut self, i: usize, src: AstPtr<ast::RecordField>, res: ExprId) {
         self.source_map.field_map.insert((res, i), src);
     }
 
+    // HIR -> AST mapping
+
     pub fn alloc_expr(&mut self, expr: Expr, src: ExprSource) -> ExprId {
         let id = self.body.exprs.alloc(expr);
-        self.source_map.expr_map.insert(src, id);
         self.source_map.expr_map_back.insert(id, src);
-        id
-    }
-
-    pub fn alloc_expr_desugared(&mut self, expr: Expr) -> ExprId {
-        let id = self.body.exprs.alloc(expr);
         id
     }
 
     pub fn alloc_pat(&mut self, pat: Pat, src: PatSource) -> PatId {
         let id = self.body.pats.alloc(pat);
-        self.source_map.pat_map.insert(src, id);
         self.source_map.pat_map_back.insert(id, src);
         id
     }
+
+    // Missing cases
 
     pub fn missing_expr(&mut self) -> ExprId {
         self.body.exprs.alloc(Expr::Missing)
