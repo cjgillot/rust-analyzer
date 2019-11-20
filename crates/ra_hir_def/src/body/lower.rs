@@ -135,8 +135,7 @@ where
         self.body.missing_pat()
     }
 
-    fn collect_expr(&mut self, expr: ast::Expr) -> ExprId {
-        let syntax_ptr = AstPtr::new(&expr);
+    fn do_collect_expr(&mut self, expr: ast::Expr, syntax_ptr: AstPtr<ast::Expr>) -> ExprId {
         let expr = match expr {
             ast::Expr::IfExpr(e) => {
                 let expr = self.collect_if(e, syntax_ptr);
@@ -380,6 +379,14 @@ where
             },
         };
         self.alloc_expr(expr, syntax_ptr)
+    }
+
+    fn collect_expr(&mut self, expr: ast::Expr) -> ExprId {
+        let syntax_ptr = AstPtr::new(&expr);
+        let src = self.expander.to_source(Either::A(syntax_ptr));
+        let id = self.do_collect_expr(expr, syntax_ptr);
+        self.body.map_expr(src, id);
+        id
     }
 
     fn collect_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
