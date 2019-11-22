@@ -118,7 +118,7 @@ where
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
         let ptr = Either::A(ptr);
         let src = self.expander.to_source(ptr);
-        let expr = self.body.alloc_expr(expr, src);
+        let expr = self.body.alloc_expr(expr, src.map(|a| a.either(Into::into, Into::into)));
         self.body.map_expr(src, expr);
         expr
     }
@@ -126,22 +126,20 @@ where
     /// Allocate an ExprId for a node created by desugaring.
     /// It is not registered in the AST->HIR mapping.
     fn alloc_expr_desugared(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
-        let ptr = Either::A(ptr);
-        let src = self.expander.to_source(ptr);
+        let src = self.expander.to_source(ptr.syntax_node_ptr());
         self.body.alloc_expr(expr, src)
     }
 
     /// Allocate ExprId for RecordField.
     fn alloc_expr_field_shorthand(&mut self, expr: Expr, ptr: AstPtr<ast::RecordField>) -> ExprId {
-        let ptr = Either::B(ptr);
-        let src = self.expander.to_source(ptr);
+        let src = self.expander.to_source(ptr.syntax_node_ptr());
         self.body.alloc_expr(expr, src)
     }
 
     /// Allocate PatId.
     fn alloc_pat(&mut self, pat: Pat, ptr: PatPtr) -> PatId {
         let src = self.expander.to_source(ptr);
-        let pat = self.body.alloc_pat(pat, src);
+        let pat = self.body.alloc_pat(pat, src.map(|a| a.either(Into::into, Into::into)));
         self.body.map_pat(src, pat);
         pat
     }

@@ -117,16 +117,14 @@ impl BodyWithSourceMap {
 
     // HIR -> AST mapping
 
-    pub fn alloc_expr(&mut self, expr: Expr, src: ExprSource) -> ExprId {
+    pub fn alloc_expr(&mut self, expr: Expr, src: AstSource) -> ExprId {
         let id = self.body.exprs.alloc(expr);
-        let src = src.map(|a| a.either(Into::into, Into::into));
         self.source_map.expr_map_back.insert(id, src);
         id
     }
 
-    pub fn alloc_pat(&mut self, pat: Pat, src: PatSource) -> PatId {
+    pub fn alloc_pat(&mut self, pat: Pat, src: AstSource) -> PatId {
         let id = self.body.pats.alloc(pat);
-        let src = src.map(|a| a.either(Into::into, Into::into));
         self.source_map.pat_map_back.insert(id, src);
         id
     }
