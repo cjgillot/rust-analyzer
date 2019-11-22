@@ -165,10 +165,7 @@ where
 
     fn do_collect_expr(&mut self, expr: ast::Expr, syntax_ptr: AstPtr<ast::Expr>) -> ExprId {
         let expr = match expr {
-            ast::Expr::IfExpr(e) => {
-                let expr = self.collect_if(e);
-                expr
-            }
+            ast::Expr::IfExpr(e) => self.collect_if(e),
             ast::Expr::TryBlockExpr(e) => {
                 let body = self.collect_block_opt(e.body());
                 Expr::TryBlock { body }
@@ -178,10 +175,7 @@ where
                 let body = self.collect_block_opt(e.loop_body());
                 Expr::Loop { body }
             }
-            ast::Expr::WhileExpr(e) => {
-                let expr = self.collect_while(e);
-                expr
-            }
+            ast::Expr::WhileExpr(e) => self.collect_while(e),
             ast::Expr::ForExpr(e) => {
                 let iterable = self.collect_expr_opt(e.iterable());
                 let pat = self.collect_pat_opt(e.pat());
