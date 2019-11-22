@@ -170,7 +170,7 @@ where
                 let body = self.collect_block_opt(e.body());
                 Expr::TryBlock { body }
             }
-            ast::Expr::BlockExpr(e) => return self.collect_block(e),
+            ast::Expr::BlockExpr(e) => self.do_collect_block(e),
             ast::Expr::LoopExpr(e) => {
                 let body = self.collect_block_opt(e.loop_body());
                 Expr::Loop { body }
@@ -483,11 +483,10 @@ where
         Expr::While { condition, body }
     }
 
-    fn collect_block(&mut self, expr: ast::BlockExpr) -> ExprId {
-        let syntax_node_ptr = AstPtr::new(&expr.clone().into());
+    fn do_collect_block(&mut self, expr: ast::BlockExpr) -> Expr {
         let block = match expr.block() {
             Some(block) => block,
-            None => return self.alloc_expr(Expr::Missing, syntax_node_ptr),
+            None => return Expr::Missing,
         };
         let statements = block
             .statements()
@@ -502,7 +501,13 @@ where
             })
             .collect();
         let tail = block.expr().map(|e| self.collect_expr(e));
-        self.alloc_expr(Expr::Block { statements, tail }, syntax_node_ptr)
+        Expr::Block { statements, tail }
+    }
+
+    fn collect_block(&mut self, expr: ast::BlockExpr) -> ExprId {
+        let syntax_node_ptr = AstPtr::new(&expr.clone().into());
+        let expr = self.do_collect_block(expr);
+        self.alloc_expr(expr, syntax_node_ptr)
     }
 
     fn collect_block_opt(&mut self, expr: Option<ast::BlockExpr>) -> ExprId {
