@@ -26,7 +26,7 @@ use crate::{
     expr::{BodySourceMap, ExprScopes, ScopeId},
     ids::LocationCtx,
     ty::method_resolution::{self, implements_trait},
-    Adt, AssocItem, Const, DefWithBody, Either, Enum, EnumVariant, FromSource, Function,
+    Adt, AssocItem, Const, DefWithBody, Enum, EnumVariant, FromSource, Function,
     GenericParam, HasBody, HirFileId, Local, MacroDef, Module, Name, Path, ScopeDef, Static,
     Struct, Trait, Ty, TypeAlias,
 };
@@ -111,7 +111,7 @@ pub enum PathResolution {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScopeEntryWithSyntax {
     pub(crate) name: Name,
-    pub(crate) ptr: Either<AstPtr<ast::Pat>, AstPtr<ast::SelfParam>>,
+    pub(crate) ptr: SyntaxNodePtr,
 }
 
 impl ScopeEntryWithSyntax {
@@ -119,7 +119,7 @@ impl ScopeEntryWithSyntax {
         &self.name
     }
 
-    pub fn ptr(&self) -> Either<AstPtr<ast::Pat>, AstPtr<ast::SelfParam>> {
+    pub fn ptr(&self) -> SyntaxNodePtr {
         self.ptr
     }
 }
@@ -338,7 +338,7 @@ impl SourceAnalyzer {
     // should switch to general reference search infra there.
     pub fn find_all_refs(&self, pat: &ast::BindPat) -> Vec<ReferenceDescriptor> {
         let fn_def = pat.syntax().ancestors().find_map(ast::FnDef::cast).unwrap();
-        let ptr = Either::A(AstPtr::new(&ast::Pat::from(pat.clone())));
+        let ptr = AstPtr::new(&ast::Pat::from(pat.clone())).syntax_node_ptr();
         fn_def
             .syntax()
             .descendants()
@@ -488,8 +488,7 @@ fn scope_for_offset(
             if source.file_id != offset.file_id {
                 return None;
             }
-            let syntax_node_ptr =
-                source.value.either(|it| it.syntax_node_ptr(), |it| it.syntax_node_ptr());
+            let syntax_node_ptr = source.value;
             Some((syntax_node_ptr, scope))
         })
         // find containing scope
@@ -523,8 +522,7 @@ fn adjust(
             if source.file_id != file_id {
                 return None;
             }
-            let syntax_node_ptr =
-                source.value.either(|it| it.syntax_node_ptr(), |it| it.syntax_node_ptr());
+            let syntax_node_ptr = source.value;
             Some((syntax_node_ptr, scope))
         })
         .map(|(ptr, scope)| (ptr.range(), scope))

@@ -3,6 +3,7 @@
 use hir_def::{HasChildSource, HasSource as _, Lookup, VariantId};
 use hir_expand::either::Either;
 use ra_syntax::ast::{self, AstNode};
+use ra_syntax::SyntaxNode;
 
 use crate::{
     db::{DefDatabase, HirDatabase},
@@ -131,12 +132,11 @@ where
         self,
         db: &impl HirDatabase,
         expr_id: crate::expr::ExprId,
-    ) -> Option<Source<Either<ast::Expr, ast::RecordField>>> {
+    ) -> Option<Source<SyntaxNode>> {
         let source_map = self.body_source_map(db);
         let source_ptr = source_map.expr_syntax(expr_id)?;
         let root = source_ptr.file_syntax(db);
-        let source = source_ptr.map(|ast| ast.map(|it| it.to_node(&root), |it| it.to_node(&root)));
-        Some(source)
+        Some(source_ptr.map(|a| a.to_node(&root)))
     }
 }
 

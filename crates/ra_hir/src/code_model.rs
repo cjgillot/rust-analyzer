@@ -31,7 +31,7 @@ use crate::{
         TypeAliasId,
     },
     ty::{InferenceResult, Namespace, TraitRef},
-    Either, HasSource, Name, Source, Ty,
+    HasSource, Name, Source, Ty,
 };
 
 /// hir::Crate describes a single crate. It's the main interface with which
@@ -1004,11 +1004,11 @@ impl Local {
         infer[self.pat_id].clone()
     }
 
-    pub fn source(self, db: &impl HirDatabase) -> Source<Either<ast::BindPat, ast::SelfParam>> {
+    pub fn source(self, db: &impl HirDatabase) -> Source<SyntaxNode> {
         let source_map = self.parent.body_source_map(db);
         let src = source_map.pat_syntax(self.pat_id).unwrap(); // Hmm...
         let root = src.file_syntax(db);
-        src.map(|ast| ast.map(|it| it.cast().unwrap().to_node(&root), |it| it.to_node(&root)))
+        src.map(|ast| ast.to_node(&root))
     }
 }
 

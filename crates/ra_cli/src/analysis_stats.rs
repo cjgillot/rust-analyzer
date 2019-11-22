@@ -134,9 +134,7 @@ pub fn run(
                         let original_file = src.file_id.original_file(db);
                         let path = db.file_relative_path(original_file);
                         let line_index = host.analysis().file_line_index(original_file).unwrap();
-                        let text_range = src
-                            .value
-                            .either(|it| it.syntax().text_range(), |it| it.syntax().text_range());
+                        let text_range = src.value.text_range();
                         let (start, end) = (
                             line_index.line_col(text_range.start()),
                             line_index.line_col(text_range.end()),
