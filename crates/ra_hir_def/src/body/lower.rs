@@ -129,9 +129,8 @@ where
 
     /// Allocate an ExprId for a node created by desugaring.
     /// It is not registered in the AST->HIR mapping.
-    fn alloc_expr_desugared(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
-        let src = self.expander.to_source(ptr.syntax_node_ptr());
-        self.body.alloc_expr(expr, src)
+    fn alloc_expr_desugared(&mut self, expr: Expr) -> ExprId {
+        self.body.alloc_expr(expr, self.syntax_ptr)
     }
 
     /// Allocate ExprId for RecordField.
@@ -149,9 +148,9 @@ where
     }
 
     /// Allocate an empty block.
-    fn empty_block(&mut self, ptr: AstPtr<ast::Expr>) -> ExprId {
+    fn empty_block(&mut self) -> ExprId {
         let block = Expr::Block { statements: Vec::new(), tail: None };
-        self.alloc_expr(block, ptr)
+        self.body.alloc_expr(block, self.syntax_ptr)
     }
 
     /// Signal a missing expression.
@@ -167,7 +166,7 @@ where
     fn do_collect_expr(&mut self, expr: ast::Expr, syntax_ptr: AstPtr<ast::Expr>) -> ExprId {
         let expr = match expr {
             ast::Expr::IfExpr(e) => {
-                let expr = self.collect_if(e, syntax_ptr);
+                let expr = self.collect_if(e);
                 expr
             }
             ast::Expr::TryBlockExpr(e) => {
@@ -180,7 +179,7 @@ where
                 Expr::Loop { body }
             }
             ast::Expr::WhileExpr(e) => {
-                let expr = self.collect_while(e, syntax_ptr);
+                let expr = self.collect_while(e);
                 expr
             }
             ast::Expr::ForExpr(e) => {
@@ -426,7 +425,7 @@ where
         }
     }
 
-    fn collect_if(&mut self, expr: ast::IfExpr, syntax_ptr: AstPtr<ast::Expr>) -> Expr {
+    fn collect_if(&mut self, expr: ast::IfExpr) -> Expr {
         let then_branch = self.collect_block_opt(expr.then_branch());
 
         let else_branch = expr.else_branch().map(|b| match b {
@@ -450,7 +449,7 @@ where
                         MatchArm { pats: vec![pat], expr: then_branch, guard: None },
                         MatchArm {
                             pats: vec![placeholder_pat],
-                            expr: else_branch.unwrap_or_else(|| self.empty_block(syntax_ptr)),
+                            expr: else_branch.unwrap_or_else(|| self.empty_block()),
                             guard: None,
                         },
                     ];
@@ -462,7 +461,7 @@ where
         Expr::If { condition, then_branch, else_branch }
     }
 
-    fn collect_while(&mut self, expr: ast::WhileExpr, syntax_ptr: AstPtr<ast::Expr>) -> Expr {
+    fn collect_while(&mut self, expr: ast::WhileExpr) -> Expr {
         let body = self.collect_block_opt(expr.loop_body());
 
         let condition = match expr.condition() {
@@ -475,13 +474,13 @@ where
                     let pat = self.collect_pat(pat);
                     let match_expr = self.collect_expr_opt(condition.expr());
                     let placeholder_pat = self.missing_pat();
-                    let break_ = self.alloc_expr_desugared(Expr::Break { expr: None }, syntax_ptr);
+                    let break_ = self.alloc_expr_desugared(Expr::Break { expr: None });
                     let arms = vec![
                         MatchArm { pats: vec![pat], expr: body, guard: None },
                         MatchArm { pats: vec![placeholder_pat], expr: break_, guard: None },
                     ];
                     let match_expr =
-                        self.alloc_expr_desugared(Expr::Match { expr: match_expr, arms }, syntax_ptr);
+                        self.alloc_expr_desugared(Expr::Match { expr: match_expr, arms });
                     return Expr::Loop { body: match_expr };
                 }
             },
