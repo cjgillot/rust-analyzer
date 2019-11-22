@@ -9,7 +9,7 @@ use ra_syntax::{
         self, ArgListOwner, ArrayExprKind, LiteralKind, LoopBodyOwner, NameOwner,
         TypeAscriptionOwner,
     },
-    AstNode, AstPtr,
+    AstNode, AstPtr, SyntaxNodePtr,
 };
 use test_utils::tested_by;
 use crate::{HasModule, HasSource, Lookup};
@@ -34,21 +34,24 @@ pub(super) fn lower(
 ) -> (Body, BodySourceMap) {
     let mut params = None;
 
-    let (file_id, module, body) = match def {
+    let (file_id, module, syntax_ptr, body) = match def {
         DefWithBodyId::FunctionId(f) => {
             let f = f.lookup(db);
             let src = f.source(db);
+            let ptr = AstPtr::new(&src.value);
             params = src.value.param_list();
-            (src.file_id, f.module(db), src.value.body().map(ast::Expr::from))
+            (src.file_id, f.module(db), ptr.syntax_node_ptr(), src.value.body().map(ast::Expr::from))
         }
         DefWithBodyId::ConstId(c) => {
             let c = c.lookup(db);
             let src = c.source(db);
-            (src.file_id, c.module(db), src.value.body())
+            let ptr = AstPtr::new(&src.value);
+            (src.file_id, c.module(db), ptr.syntax_node_ptr(), src.value.body())
         }
         DefWithBodyId::StaticId(s) => {
             let src = s.source(db);
-            (src.file_id, s.module(db), src.value.body())
+            let ptr = AstPtr::new(&src.value);
+            (src.file_id, s.module(db), ptr.syntax_node_ptr(), src.value.body())
         }
     };
 
@@ -57,6 +60,7 @@ pub(super) fn lower(
     ExprCollector {
         expander,
         db,
+        syntax_ptr,
         body: BodyWithSourceMap::new(),
     }
     .collect(params, body)
@@ -67,6 +71,7 @@ struct ExprCollector<DB> {
     expander: Expander,
 
     body: BodyWithSourceMap,
+    syntax_ptr: SyntaxNodePtr,
 }
 
 impl<'a, DB> ExprCollector<&'a DB>
