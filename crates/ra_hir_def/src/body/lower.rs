@@ -147,6 +147,12 @@ where
         pat
     }
 
+    /// Allocate an ExprId for a node created by desugaring.
+    /// It is not registered in the AST->HIR mapping.
+    fn alloc_pat_desugared(&mut self, pat: Pat) -> PatId {
+        self.body.alloc_pat(pat, self.syntax_ptr)
+    }
+
     /// Allocate an empty block.
     fn empty_block(&mut self) -> ExprId {
         let block = Expr::Block { statements: Vec::new(), tail: None };
@@ -435,7 +441,7 @@ where
                 Some(pat) => {
                     let pat = self.collect_pat(pat);
                     let match_expr = self.collect_expr_opt(condition.expr());
-                    let placeholder_pat = self.missing_pat();
+                    let placeholder_pat = self.alloc_pat_desugared(Pat::Wild);
                     let arms = vec![
                         MatchArm { pats: vec![pat], expr: then_branch, guard: None },
                         MatchArm {
@@ -464,7 +470,7 @@ where
                     tested_by!(infer_resolve_while_let);
                     let pat = self.collect_pat(pat);
                     let match_expr = self.collect_expr_opt(condition.expr());
-                    let placeholder_pat = self.missing_pat();
+                    let placeholder_pat = self.alloc_pat_desugared(Pat::Wild);
                     let break_ = self.alloc_expr_desugared(Expr::Break { expr: None });
                     let arms = vec![
                         MatchArm { pats: vec![pat], expr: body, guard: None },
