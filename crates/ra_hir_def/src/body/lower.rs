@@ -1,6 +1,7 @@
 //! FIXME: write short doc here
 
 use hir_expand::{
+    Source,
     either::Either,
     name::{self, AsName, Name},
 };
@@ -39,19 +40,22 @@ pub(super) fn lower(
             let f = f.lookup(db);
             let src = f.source(db);
             let ptr = AstPtr::new(&src.value);
+            let ptr = src.with_value(ptr.syntax_node_ptr());
             params = src.value.param_list();
-            (src.file_id, f.module(db), ptr.syntax_node_ptr(), src.value.body().map(ast::Expr::from))
+            (src.file_id, f.module(db), ptr, src.value.body().map(ast::Expr::from))
         }
         DefWithBodyId::ConstId(c) => {
             let c = c.lookup(db);
             let src = c.source(db);
             let ptr = AstPtr::new(&src.value);
-            (src.file_id, c.module(db), ptr.syntax_node_ptr(), src.value.body())
+            let ptr = src.with_value(ptr.syntax_node_ptr());
+            (src.file_id, c.module(db), ptr, src.value.body())
         }
         DefWithBodyId::StaticId(s) => {
             let src = s.source(db);
             let ptr = AstPtr::new(&src.value);
-            (src.file_id, s.module(db), ptr.syntax_node_ptr(), src.value.body())
+            let ptr = src.with_value(ptr.syntax_node_ptr());
+            (src.file_id, s.module(db), ptr, src.value.body())
         }
     };
 
@@ -71,7 +75,7 @@ struct ExprCollector<DB> {
     expander: Expander,
 
     body: BodyWithSourceMap,
-    syntax_ptr: SyntaxNodePtr,
+    syntax_ptr: Source<SyntaxNodePtr>,
 }
 
 impl<'a, DB> ExprCollector<&'a DB>
