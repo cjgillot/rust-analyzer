@@ -260,8 +260,11 @@ where
                 Expr::Break { expr }
             }
             ast::Expr::ParenExpr(e) => {
-                // collect_expr makes the paren expr points to the inner expression
-                return self.collect_expr_opt(e.expr())
+                let id = self.collect_expr_opt(e.expr());
+                // make sure the paren expr points to the inner expression
+                let src = self.expander.to_source(Either::A(syntax_ptr));
+                self.body.map_expr(src, id);
+                return id
             }
             ast::Expr::ReturnExpr(e) => {
                 let expr = e.expr().map(|e| self.collect_expr(e));
