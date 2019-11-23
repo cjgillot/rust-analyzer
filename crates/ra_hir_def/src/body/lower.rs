@@ -169,6 +169,23 @@ where
         self.body.missing_pat()
     }
 
+    fn with_source_ptr<S, T>(
+        &mut self,
+        src: Source<S>,
+        ptr: SyntaxNodePtr,
+        f: impl FnOnce(&mut Self) -> T
+    ) -> T {
+        let parent_ptr = std::mem::replace(
+            &mut self.syntax_ptr,
+            src.with_value(ptr)
+        );
+
+        let ret = f(self);
+
+        self.syntax_ptr = parent_ptr;
+        ret
+    }
+
     fn do_collect_expr(&mut self, expr: ast::Expr, syntax_ptr: AstPtr<ast::Expr>) -> ExprId {
         let expr = match expr {
             ast::Expr::IfExpr(e) => self.collect_if(e),
@@ -409,9 +426,12 @@ where
     fn collect_expr(&mut self, expr: ast::Expr) -> ExprId {
         let syntax_ptr = AstPtr::new(&expr);
         let src = self.expander.to_source(Either::A(syntax_ptr));
-        let id = self.do_collect_expr(expr, syntax_ptr);
-        self.body.map_expr(src, id);
-        id
+
+        self.with_source_ptr(src, syntax_ptr.syntax_node_ptr(), |this| {
+            let id = this.do_collect_expr(expr, syntax_ptr);
+            this.body.map_expr(src, id);
+            id
+        })
     }
 
     fn collect_expr_opt(&mut self, expr: Option<ast::Expr>) -> ExprId {
@@ -521,8 +541,8 @@ where
         }
     }
 
-    fn collect_pat(&mut self, pat: ast::Pat) -> PatId {
-        let pattern = match &pat {
+    fn do_collect_pat(&mut self, pat: ast::Pat) -> Pat {
+        match &pat {
             ast::Pat::BindPat(bp) => {
                 let name = bp.name().map(|nr| nr.as_name()).unwrap_or_else(Name::missing);
                 let annotation = BindingAnnotation::new(bp.is_mutable(), bp.is_ref());
@@ -578,9 +598,19 @@ where
             ast::Pat::BoxPat(_) => Pat::Missing,
             ast::Pat::LiteralPat(_) => Pat::Missing,
             ast::Pat::SlicePat(_) | ast::Pat::RangePat(_) => Pat::Missing,
-        };
+        }
+    }
+
+    fn collect_pat(&mut self, pat: ast::Pat) -> PatId {
         let ptr = AstPtr::new(&pat);
-        self.alloc_pat(pattern, Either::A(ptr))
+        let src = self.expander.to_source(Either::A(ptr));
+
+        self.with_source_ptr(src, ptr.syntax_node_ptr(), |this| {
+            let pattern = this.do_collect_pat(pat);
+            let id = this.alloc_pat(pattern, Either::A(ptr));
+            this.body.map_pat(src, id);
+            id
+        })
     }
 
     fn collect_pat_opt(&mut self, pat: Option<ast::Pat>) -> PatId {
