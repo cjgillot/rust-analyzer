@@ -119,6 +119,7 @@ where
     }
 
     /// Allocate a new ExprId.
+    /// This function is responsible for defining both HIR->AST and AST->HIR mapping.
     fn alloc_expr(&mut self, expr: Expr, ptr: AstPtr<ast::Expr>) -> ExprId {
         let ptr = Either::A(ptr);
         let src = self.expander.to_source(ptr);
@@ -140,6 +141,7 @@ where
     }
 
     /// Allocate PatId.
+    /// This function is responsible for defining both HIR->AST and AST->HIR mapping.
     fn alloc_pat(&mut self, pat: Pat, ptr: PatPtr) -> PatId {
         let src = self.expander.to_source(ptr);
         let pat = self.body.alloc_pat(pat, src.map(|a| a.either(Into::into, Into::into)));
@@ -156,7 +158,7 @@ where
     /// Allocate an empty block.
     fn empty_block(&mut self) -> ExprId {
         let block = Expr::Block { statements: Vec::new(), tail: None };
-        self.body.alloc_expr(block, self.syntax_ptr)
+        self.alloc_expr_desugared(block)
     }
 
     /// Signal a missing expression.
