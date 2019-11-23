@@ -169,15 +169,14 @@ where
         self.body.missing_pat()
     }
 
-    fn with_source_ptr<S, T>(
+    fn with_source_ptr<T>(
         &mut self,
-        src: Source<S>,
-        ptr: SyntaxNodePtr,
+        src: Source<AstPtr<impl AstNode>>,
         f: impl FnOnce(&mut Self) -> T
     ) -> T {
         let parent_ptr = std::mem::replace(
             &mut self.syntax_ptr,
-            src.with_value(ptr)
+            src.with_value(src.value.syntax_node_ptr())
         );
 
         let ret = f(self);
@@ -425,12 +424,10 @@ where
 
     fn collect_expr(&mut self, expr: ast::Expr) -> ExprId {
         let syntax_ptr = AstPtr::new(&expr);
-        let src = self.expander.to_source(Either::A(syntax_ptr));
+        let src = self.expander.to_source(syntax_ptr);
 
-        self.with_source_ptr(src, syntax_ptr.syntax_node_ptr(), |this| {
-            let id = this.do_collect_expr(expr, syntax_ptr);
-            this.body.map_expr(src, id);
-            id
+        self.with_source_ptr(src, |this| {
+            this.do_collect_expr(expr, syntax_ptr)
         })
     }
 
@@ -603,13 +600,11 @@ where
 
     fn collect_pat(&mut self, pat: ast::Pat) -> PatId {
         let ptr = AstPtr::new(&pat);
-        let src = self.expander.to_source(Either::A(ptr));
+        let src = self.expander.to_source(ptr);
 
-        self.with_source_ptr(src, ptr.syntax_node_ptr(), |this| {
+        self.with_source_ptr(src, |this| {
             let pattern = this.do_collect_pat(pat);
-            let id = this.alloc_pat(pattern, Either::A(ptr));
-            this.body.map_pat(src, id);
-            id
+            this.alloc_pat(pattern, Either::A(ptr))
         })
     }
 
